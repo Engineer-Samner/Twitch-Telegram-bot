@@ -300,42 +300,8 @@ bot.command('stop', async ctx => {
         }
     })
     if (flag) {
-        ctx.reply('Для выполнения команды необходимы права администратора группы Fluffy_3008 Community');
+        ctx.reply('Для выполнения команды необходимы права администратора чата');
         log(username, 'использует команду /stop: необходимы права администратора');
-    }
-});
-
-bot.command('install', ctx => {
-    const username = ctx.update.message.from.first_name;
-    const text = "<u><b>Мануал по установке PS app</b></u>\n" +
-        "1. Скачиваем мастер установки <a href=\"https://res.ldrescdn.com/download/LDPlayer9.exe?n=LDPlayer9_ru_1007_ld.exe\"><u>по ссылке</u></a> \n" +
-        "2. Если <b>НЕ</b> появится сообщение об небезопасном файле, пропускаем пункт, иначе нажимаем на 3 точки -> сохранить -> всё равно сохранить.\n" +
-        "3. Запускаем программу установки, нажимаем на кнопку 'установить'\n" +
-        "4. Заходим в Play Market (находится в папке 'Приложения системы', авторизуемся, и вбиваем в поиск 'PS app'\n" +
-        "5. Скачиваем, запускаем, авторизуемся\n" +
-        "6. (<i>опционально</i>). Заходим в настройки (шестерёнка в главном меню в правом верхнем углу), " +
-        "находим пункт 'Тусовка' -> Конфиденциальность -> переключаем тумблер напротив пункта 'поделитесь своим голосом'\n" +
-        "Как зайти в войс чат (Тусовка)\n0. Если кинули приглос, то принимаем. Далее зайдёте в войс. Если вылетили/вышли, то следует ниже пунктам\n" +
-        "1. Нажимаем на иконку в верхнем левом углу\n" +
-        "2. Выбираем из списка нужную нам тусовку\n" +
-        "3. Нажимаем на 'Присоединится к тусовке'";
-
-    const photos = Array.from({ length: 7 }, (_, num) => (`data/image/manual-${num + 1}.jpg`));
-    const captions = [text, ...Array(6).fill('')]
-
-    try {
-        ctx.replyWithMediaGroup(
-            photos.map((photo, index) => ({
-                type: 'photo',
-                media: { source: photo },
-                caption: captions[index] || undefined,
-                parse_mode: 'HTML'
-            }))
-        );
-        log(username, 'использует команду /install: сообщение отправлено');
-    }
-    catch (error) {
-        log('❌Ошибка отправки сообщения: ', error);
     }
 });
 
@@ -702,24 +668,6 @@ bot.action('tokens', ctx => {
 });
 
 // ==================== Настройки взаимодействия с твичом. Конец =====================
-
-bot.hears(/((утр\S{1,4}).+(добр\S{2,6}))|((добр\S{2,6}).+(утр\S{1,4}))/gi, (ctx) => {
-    const username = ctx.update.message.from.first_name;
-    const msg = ctx.update.message.text;
-    ctx.reply(`И тебе доброго утра, ${username}!`);
-    log('Ответ отправлен на сообщение пользователя', username, ':', msg);
-});
-
-bot.hears(/((еб.{4,6}).+(утр\S{1,4}))|((утр\S{1,4}).+(еб.{4,6}))/gi, (ctx) => {
-    const username = ctx.update.message.from.first_name;
-    const msg = ctx.update.message.text;
-    ctx.reply(`И тебе ебаного утра, ${username}!`, {})
-    log('Ответ отправлен на сообщение пользователя', username, ':', msg);
-});
-
-bot.hears(/лысый/gi, ctx => {
-    ctx.replyWithSticker('CAACAgIAAxkBAAENPhBnyq9fvcw31dEl5njZ7nO2kkT4SAACI2MAAot9OUr-zizqC-yzxjYE');
-});
 
 bot.on('message', async ctx => {
     if (['cancel', 'chatedit'].includes(action)) return;
