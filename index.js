@@ -14,6 +14,7 @@ const {
 
 let {
     CHAT_ID,                        // ID чата
+    TYPE_CHAT,                      // Тип чата
     THREAD_ALERTS_ID,               // ID потока чата-оповещения (опционально)
     THREAD_NEWS_ID,                 // ID потока чата-новости (опционально)
     THREAD_CLIPS_ID,
@@ -32,7 +33,7 @@ let lastPost = '';
 let lastClip = '';
 let wasLive = false;
 let accessToken = '';
-let userId = null;
+let userId = undefined;
 let mesAlerts = '';
 let processNews = undefined;
 let processAlerts = undefined;
@@ -40,7 +41,7 @@ let processClips = undefined;
 
 // Переменные для временного хранения переменных при настройке бота
 let action = 'cancel';
-let chatid = null;
+let chatid = undefined;
 let client_id = '';
 let phrase = '';
 let threadId = '';
@@ -311,8 +312,8 @@ bot.command('settings', ctx => {
         {
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: 'Пересылка постов', callback_data: 'forward' }],
-                    [{ text: 'Чат', callback_data: 'chatsetting' }, { text: 'Twitch', callback_data: 'twitch' }],
+                    [{ text: 'Чат', callback_data: 'chatsettings' }],
+                    [{ text: 'Пересылка постов', callback_data: 'forward' }, { text: 'Twitch', callback_data: 'twitch' }],
                     [{ text: 'Обновить бота', callback_data: 'botupdate' }]
                 ]
             }
@@ -322,7 +323,7 @@ bot.command('settings', ctx => {
 
 bot.command('cancel', ctx => {
     action = 'cancel';
-    threadId = null;
+    threadId = undefined;
     phrase = '';
     client_id = '';
     chatid = '';
@@ -334,8 +335,8 @@ bot.action('settings', ctx => {
         {
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: 'Пересылка постов', callback_data: 'forward' }],
-                    [{ text: 'Чат', callback_data: 'chatsetting' }, { text: 'Twitch', callback_data: 'twitch' }],
+                    [{ text: 'Чат', callback_data: 'chatsettings' }],
+                    [{ text: 'Пересылка постов', callback_data: 'forward' }, { text: 'Twitch', callback_data: 'twitch' }],
                     [{ text: 'Обновить бота', callback_data: 'botupdate' }]
                 ]
             }
@@ -390,7 +391,7 @@ bot.action('officialrssbridge', ctx => {
 // ==================== Настройки пересылки постов. Конец =====================
 // ==================== Настройки чата =====================
 
-bot.action('chatsetting', async ctx => {
+bot.action('chatsettings', async ctx => {
     let chat = undefined;
     try {
         chat = await bot.telegram.getChat(CHAT_ID);
@@ -400,19 +401,70 @@ bot.action('chatsetting', async ctx => {
     }
     ctx.editMessageText('Текущие настройки чата\n\n' +
         `Чат группы/канал: ${chat?.title ?? 'Не задан или бот не состоит в группе/канале'}\n` +
-        `Поток для оповещений о стриме: ${(isNaN(THREAD_ALERTS_ID) ? null : THREAD_ALERTS_ID) ?? 'Не задан'}\n` +
-        `Поток для пересылки постов с канала ${TELEGRAM_CHANNEL}: ${(isNaN(THREAD_NEWS_ID) ? null : THREAD_NEWS_ID) ?? 'Не задан'}\n` +
-        `Поток для опубликования клипов: ${(isNaN(THREAD_CLIPS_ID) ? null : THREAD_CLIPS_ID) ?? 'Не задан'}`,
+        `Поток для оповещений о стриме: ${(isNaN(THREAD_ALERTS_ID) ? undefined : THREAD_ALERTS_ID) ?? 'Не задан'}\n` +
+        `Поток для пересылки постов с канала ${TELEGRAM_CHANNEL}: ${(isNaN(THREAD_NEWS_ID) ? undefined : THREAD_NEWS_ID) ?? 'Не задан'}\n` +
+        `Поток для опубликования клипов: ${(isNaN(THREAD_CLIPS_ID) ? undefined : THREAD_CLIPS_ID) ?? 'Не задан'}`,
         {
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: 'Сменить поток для алертов', callback_data: 'threadalerts' }, { text: 'Сменить чат группы', callback_data: 'chat' }],
+                    [{ text: 'Сменить поток для алертов', callback_data: 'threadalerts' }, { text: 'Сменить чат/канал', callback_data: 'chatchannel' }],
                     [{ text: 'Сменить поток постов', callback_data: 'threadnews' }, { text: 'Сменить поток клипов', callback_data: 'threadclips' }],
                     [{ text: 'Назад', callback_data: 'settings' }]
                 ]
             }
         }
     );
+});
+
+bot.action('chatchannel', ctx => {
+    ctx.editMessageText('Выбери, куда хочешь добавить бота',
+        {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: 'Чат', callback_data: 'chat' }, { text: 'Телеграм канал', callback_data: 'channelsettings' }],
+                    [{ text: 'Назад', callback_data: 'chatsettings' }]
+                ]
+            }
+        }
+    )
+});
+
+bot.action('channelsettings', ctx => {
+    action = 'channelsettingsedit';
+    ctx.reply('Окей, добавь меня в канал в качестве администратора, затем перешли мне любой пост\n' +
+        '<b>🚨ВНИМАНИЕ!🚨</b>\n' +
+        'После смены чата все потоки будут сброшены до заводских значений. Их восстановление будет невозможно.',
+        {
+            parse_mode: 'HTML'
+        }
+    );
+});
+
+bot.action('channelsettingsedit', ctx => {
+    updateEnvVariable('TYPE_CHAT', 'channel');
+    updateEnvVariable('CHAT_ID', chatid);
+
+    updateEnvVariable('THREAD_ALERTS_ID', undefined);
+    updateEnvVariable('THREAD_CLIPS_ID', undefined);
+    updateEnvVariable('THREAD_NEWS_ID', undefined);
+    THREAD_ALERTS_ID = THREAD_CLIPS_ID = THREAD_NEWS_ID = undefined;
+    !fs.existsSync(`./data/others/${LAST_POST_FILE}`) || fs.unlinkSync(`./data/others/${LAST_POST_FILE}`);
+    !fs.existsSync(`./data/others/${LAST_CLIP_FILE}`) || fs.unlinkSync(`./data/others/${LAST_CLIP_FILE}`);
+    lastClip = lastPost = '';
+    wasLive = false;
+    clearInterval(processAlerts);
+    clearInterval(processClips);
+    clearInterval(processNews);
+
+    ctx.reply('Смена канала прошла успешно');
+    if (TYPE_CHAT === 'group') {
+        log('ID чата был сменен на ID канала с', CHAT_ID, 'на', chatid);
+    }
+    else if (TYPE_CHAT === 'channel') {
+        log('ID канала был сменен с', CHAT_ID, 'на', chatid);
+    }
+    CHAT_ID = chatid;
+    TYPE_CHAT = 'channel';
 });
 
 function generatePhrase() {
@@ -440,20 +492,37 @@ bot.action('threadnews', ctx => {
         return;
     }
 
-    action = 'threadnewsedit';
-    phrase = generatePhrase();
-    ctx.reply('Окей, отправь фразу, написанная ниже, в тот поток, в который хочешь получать опубликованные посты\n' +
-        'Для отмены дествия используй /cancel\n\n' +
-        `<code>${phrase}</code>`,
-        {
-            parse_mode: 'HTML',
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: 'Хочу отключить пересылку постов', callback_data: 'offnews' }]
-                ]
+    if (TYPE_CHAT === 'group') {
+        phrase = generatePhrase();
+        action = 'threadnewsedit';
+        ctx.reply('Окей, отправь фразу, написанная ниже, в тот поток, в который хочешь получать опубликованные посты\n' +
+            'Для отмены дествия используй /cancel\n\n' +
+            `<code>${phrase}</code>`,
+            {
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: 'Хочу отключить пересылку постов', callback_data: 'offnews' }]
+                    ]
+                }
             }
-        }
-    );
+        );
+    }
+    else if (TYPE_CHAT === 'channel') {
+        const flag = isNaN(THREAD_NEWS_ID) ? 'on' : '';
+        ctx.reply('Окей, нажми ниже кнопку, чтобы включить/выключить пересылку постов\n' +
+            'Для отмены дествия используй /cancel\n\n' +
+            `<code>${phrase}</code>`,
+            {
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: flag ? 'Включить пересылку' : 'Выключить пересылку', callback_data: `${flag || 'off'}news` }]
+                    ]
+                }
+            }
+        );
+    }
 });
 
 bot.action('threadclips', ctx => {
@@ -470,20 +539,37 @@ bot.action('threadclips', ctx => {
         return;
     }
 
-    action = 'threadclipsedit';
-    phrase = generatePhrase();
-    ctx.reply('Окей, отправь фразу, написанная ниже, в тот поток, в который хочешь получать опубликованные клипы\n' +
-        'Для отмены дествия используй /cancel\n\n' +
-        `<code>${phrase}</code>`,
-        {
-            parse_mode: 'HTML',
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: 'Хочу отключить опубликование клюпов', callback_data: 'offclips' }]
-                ]
+    if (TYPE_CHAT === 'group') {
+        action = 'threadclipsedit';
+        phrase = generatePhrase();
+        ctx.reply('Окей, отправь фразу, написанная ниже, в тот поток, в который хочешь получать опубликованные клипы\n' +
+            'Для отмены дествия используй /cancel\n\n' +
+            `<code>${phrase}</code>`,
+            {
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: 'Хочу отключить опубликование клюпов', callback_data: 'offclips' }]
+                    ]
+                }
             }
-        }
-    );
+        );
+    }
+    else if (TYPE_CHAT === 'channel'){
+        const flag = isNaN(THREAD_CLIPS_ID) ? 'on' : '';
+        ctx.reply('Окей, нажми ниже кнопку, чтобы включить/выключить публикование клипов\n' +
+            'Для отмены дествия используй /cancel\n\n' +
+            `<code>${phrase}</code>`,
+            {
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: flag ? 'Включить публикование' : 'Выключить публикование', callback_data: `${flag || 'off'}clips` }]
+                    ]
+                }
+            }
+        );
+    }
 });
 
 bot.action('threadalerts', ctx => {
@@ -500,20 +586,37 @@ bot.action('threadalerts', ctx => {
         return;
     }
 
-    action = 'threadalertsedit';
-    phrase = generatePhrase();
-    ctx.reply('Окей, отправь фразу, написанная ниже, в тот поток, в который хочешь получать оповещения о стриме\n' +
-        'Для отмены дествия используй /cancel\n\n' +
-        `<code>${phrase}</code>`,
-        {
-            parse_mode: 'HTML',
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: 'Хочу отключить оповещения о стримах', callback_data: 'offalerts' }]
-                ]
+    if (TYPE_CHAT === 'group') {
+        action = 'threadalertsedit';
+        phrase = generatePhrase();
+        ctx.reply('Окей, отправь фразу, написанная ниже, в тот поток, в который хочешь получать оповещения о стриме\n' +
+            'Для отмены дествия используй /cancel\n\n' +
+            `<code>${phrase}</code>`,
+            {
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: 'Хочу отключить оповещения о стримах', callback_data: 'offalerts' }]
+                    ]
+                }
             }
-        }
-    );
+        );
+    }
+    else if (TYPE_CHAT === 'channel') {
+        const flag = isNaN(THREAD_ALERTS_ID) ? 'on' : '';
+        ctx.reply('Окей, нажми ниже кнопку, чтобы включить/выключить оповещения о стриме\n' +
+            'Для отмены дествия используй /cancel\n\n' +
+            `<code>${phrase}</code>`,
+            {
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: flag ? 'Включить оповещения' : 'Выключить оповещения', callback_data: `${flag || 'off'}alerts` }]
+                    ]
+                }
+            }
+        );
+    }
 });
 
 bot.action('threadalertsedit', ctx => {
@@ -543,35 +646,59 @@ bot.action('threadclipsedit', ctx => {
     log('Поток для опубликования клипов изменен на', THREAD_CLIPS_ID);
 });
 
+bot.action('onclips', ctx => {
+    updateEnvVariable('THREAD_CLIPS_ID', 0);
+    THREAD_CLIPS_ID = 0;
+    processClips ??= setInterval(checkNewClip, 60 * 1000);
+    ctx.reply('🟢Публикование клипов включена');
+    log('Публикование клипов включена');
+});
+
 bot.action('offclips', ctx => {
     action = 'cancel';
-    updateEnvVariable('THREAD_CLIPS_ID', null);
-    THREAD_CLIPS_ID = null;
+    updateEnvVariable('THREAD_CLIPS_ID', undefined);
+    THREAD_CLIPS_ID = undefined;
     clearInterval(processClips);
     fs.unlinkSync(`./data/others/${LAST_CLIP_FILE}`);
     lastClip = '';
-    ctx.reply('Отключил публикование клипов');
+    ctx.reply('🔴Отключил публикование клипов');
     log('Публикование клипов отключено');
-})
+});
+
+bot.action('onnews', ctx => {
+    updateEnvVariable('THREAD_NEWS_ID', 0);
+    THREAD_NEWS_ID = 0;
+    processNews ??= setInterval(checkNewPost, 60 * 1000);
+    ctx.reply('🟢Пересылка постов включена');
+    log('Пересылка постов включена');
+});
 
 bot.action('offnews', ctx => {
     action = 'cancel';
-    updateEnvVariable('THREAD_NEWS_ID', null);
-    THREAD_NEWS_ID = null;
+    updateEnvVariable('THREAD_NEWS_ID', undefined);
+    THREAD_NEWS_ID = undefined;
     clearInterval(processNews);
     fs.unlinkSync(`./data/others/${LAST_POST_FILE}`);
     lastPost = '';
-    ctx.reply('Отключил пересылку постов');
+    ctx.reply('🔴Отключил пересылку постов');
     log('Пересылка постов отключена');
+});
+
+bot.action('onalerts', ctx => {
+    updateEnvVariable('THREAD_ALERTS_ID', 0);
+    THREAD_ALERTS_ID = 0;
+    processAlerts ??= setInterval(checkStream, 60 * 1000);
+    ctx.reply('🟢Оповещения о стриме включена');
+    log('Оповещения о стриме включена');
 });
 
 bot.action('offalerts', ctx => {
     action = 'cancel';
-    updateEnvVariable('THREAD_ALERTS_ID', null);
-    THREAD_ALERTS_ID = null;
+    updateEnvVariable('THREAD_ALERTS_ID', undefined);
+    THREAD_ALERTS_ID = undefined;
     clearInterval(processAlerts);
     wasLive = false;
-    ctx.reply('Отключил получение оповещений о запуске стрима');
+    ctx.reply('🔴Отключил получение оповещений о запуске стрима');
     log('Оповещения о стриме отключены');
 });
 
@@ -588,11 +715,13 @@ bot.action('chat', ctx => {
 
 bot.action('chatedit', ctx => {
     updateEnvVariable('CHAT_ID', chatid);
+    TYPE_CHAT = 'group';
+    updateEnvVariable('TYPE_CHAT', TYPE_CHAT);
 
-    updateEnvVariable('THREAD_ALERTS_ID', null);
-    updateEnvVariable('THREAD_CLIPS_ID', null);
-    updateEnvVariable('THREAD_NEWS_ID', null);
-    THREAD_ALERTS_ID = THREAD_CLIPS_ID = THREAD_NEWS_ID = null;
+    updateEnvVariable('THREAD_ALERTS_ID', undefined);
+    updateEnvVariable('THREAD_CLIPS_ID', undefined);
+    updateEnvVariable('THREAD_NEWS_ID', undefined);
+    THREAD_ALERTS_ID = THREAD_CLIPS_ID = THREAD_NEWS_ID = undefined;
     !fs.existsSync(`./data/others/${LAST_POST_FILE}`) || fs.unlinkSync(`./data/others/${LAST_POST_FILE}`);
     !fs.existsSync(`./data/others/${LAST_CLIP_FILE}`) || fs.unlinkSync(`./data/others/${LAST_CLIP_FILE}`);
     lastClip = lastPost = '';
@@ -602,7 +731,7 @@ bot.action('chatedit', ctx => {
     clearInterval(processNews);
 
     log('Изменён чат/канал с', CHAT_ID, 'на', chatid);
-    log('Потоки сброшены на значение null');
+    log('Потоки сброшены на значение undefined');
     CHAT_ID = chatid;
     ctx.editMessageText('Смена чата прошла успешно');
 });
@@ -764,6 +893,27 @@ bot.on('message', async ctx => {
             updateEnvVariable('DOMAIN', value);
             ctx.reply('Изменен адрес сервера RSS-bridge');
             log('Адрес сервера RSS-bridge изменен на', value);
+            break;
+
+        case 'channelsettingsedit':
+            const channel = ctx.update.message.forward_origin?.chat;
+            if (!channel && channel?.type !== 'channel') {
+                ctx.reply('Это не пост с канала. Перешли любой пост с канала, на который хочешь добавить меня')
+                return;
+            }
+            chatid = channel.id;
+            bot.telegram.sendMessage(OWNER_ID, `Канал: ${channel.title}\n` +
+                `ID: ${chatid}\n` +
+                'Все верно?',
+                {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: 'Подтверждаю', callback_data: action }],
+                            [{ text: 'Нет, это не тот канал', callback_data: action.slice(0, action.length - 4) }]
+                        ]
+                    }
+                }
+            );
             break;
 
         default:
