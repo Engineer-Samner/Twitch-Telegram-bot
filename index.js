@@ -245,7 +245,7 @@ bot.start(ctx => {
 });
 
 bot.help(async ctx => {
-    await ctx.reply('/backup - вывод лога за текущий день (начиная с 00-00)\n' +
+    await ctx.reply('/log - вывод лога за текущий день (начиная с 00-00)\n' +
         '/stop - остановка бота. Могут использовать команду администраторы чата\n' +
         '/testalerts - отправляет тестовое сообщение оповещения в чат\n' +
         '/testnews - отправляет тестовое сообщение поста в чат\n' +
@@ -268,7 +268,7 @@ bot.command('testnews', async (ctx) => {
     log('Тестовый пост отправлен в чат', CHAT_ID, 'поток', THREAD_NEWS_ID);
 });
 
-bot.command('backup', async () => {
+bot.command('log', async () => {
     const date = getDate();
     const fileLog = `log-${date.year}-${date.month}-${date.day}.txt`;
     try {
@@ -301,20 +301,24 @@ bot.command('stop', async ctx => {
         }
     })
     if (flag) {
-        ctx.reply('Для выполнения команды необходимы права администратора чата');
+        ctx.reply('❌Для выполнения команды необходимы права администратора чата');
         log(username, 'использует команду /stop: необходимы права администратора');
     }
 });
 
 
 bot.command('settings', ctx => {
+    if (ctx.chat.id != OWNER_ID) {
+        ctx.reply('❌Вы не являетесь владельцем бота. Доступ запрещен');
+        return;
+    }
     ctx.reply('Настройки бота',
         {
             reply_markup: {
                 inline_keyboard: [
                     [{ text: 'Чат', callback_data: 'chatsettings' }],
                     [{ text: 'Пересылка постов', callback_data: 'forward' }, { text: 'Twitch', callback_data: 'twitch' }],
-                    [{ text: 'Обновить бота', callback_data: 'botupdate' }]
+                    // [{ text: 'Обновить бота', callback_data: 'botupdate' }]
                 ]
             }
         }
@@ -337,7 +341,7 @@ bot.action('settings', ctx => {
                 inline_keyboard: [
                     [{ text: 'Чат', callback_data: 'chatsettings' }],
                     [{ text: 'Пересылка постов', callback_data: 'forward' }, { text: 'Twitch', callback_data: 'twitch' }],
-                    [{ text: 'Обновить бота', callback_data: 'botupdate' }]
+                    // [{ text: 'Обновить бота', callback_data: 'botupdate' }]
                 ]
             }
         }
@@ -368,9 +372,10 @@ bot.action('telegramchannel', ctx => {
 
 bot.action('rssbridge', ctx => {
     action = 'rssbridgeedit';
-    ctx.reply('Окей, напиши адрес в формате адрес:порт, на котором развернут <a href="https://github.com/RSS-Bridge/rss-bridge/">RSS-bridge</a>. Например, 127.0.0.1:3000\n' +
+    ctx.reply('Окей, напиши адрес в формате адрес:порт, на котором развернут <a href=\"https://github.com/RSS-Bridge/rss-bridge/\">RSS-bridge</a>. Например, 127.0.0.1:3000\n' +
         'Для отмены действия используй /cancel',
         {
+            parse_mode: 'HTML',
             reply_markup: {
                 inline_keyboard: [
                     [{ text: 'Использовать официальный сайт', callback_data: 'officialrssbridge' }]
@@ -384,7 +389,7 @@ bot.action('officialrssbridge', ctx => {
     action = 'cancel';
     DOMAIN = 'rss-bridge.org/bridge01';
     updateEnvVariable('DOMAIN', DOMAIN);
-    ctx.reply('Адрес изменен на официальный');
+    ctx.reply('✅Адрес изменен на официальный');
     log('Адрес сервера изменен на официальный');
 });
 
@@ -456,7 +461,7 @@ bot.action('channelsettingsedit', ctx => {
     clearInterval(processClips);
     clearInterval(processNews);
 
-    ctx.reply('Смена канала прошла успешно');
+    ctx.reply('✅Смена канала/чата прошла успешно');
     if (TYPE_CHAT === 'group') {
         log('ID чата был сменен на ID канала с', CHAT_ID, 'на', chatid);
     }
@@ -479,16 +484,39 @@ function generatePhrase() {
 
 bot.action('threadnews', ctx => {
     if (!DOMAIN && !TELEGRAM_CHANNEL) {
-
-        ctx.reply('Пересылка постов не настроена. Настройте: /settings -> Пересылка постов');
+        ctx.reply('⚠️Пересылка постов не настроена.',
+            {
+                reply_markup:{
+                    inline_keyboard:[
+                        [{text: 'Настроить пересылку постов', callback_data: 'forward'}]
+                    ]
+                }
+            }
+        );
         return;
     }
     else if (!DOMAIN) {
-        ctx.reply('Адрес сервера не задан. Задайте: /settings -> Пересылка постов -> Сменить URL-адрес RSS-bridge');
+        ctx.reply('⚠️Адрес сервера не задан.',
+            {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{text: 'Задать адрес сервера', callback_data: 'rssbridge'}]
+                    ]
+                }
+            }
+        );
         return;
     }
     else if (!TELEGRAM_CHANNEL) {
-        ctx.reply('Отслеживаемый канал не задан. Задайте: /settings -> Пересылка постов -> Сменить отслеживаемый канал');
+        ctx.reply('⚠️Отслеживаемый канал не задан.', 
+            {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{text: 'Задать канал', callback_data: 'telegramchannel'}]
+                    ]
+                }
+            }
+        );
         return;
     }
 
@@ -527,15 +555,39 @@ bot.action('threadnews', ctx => {
 
 bot.action('threadclips', ctx => {
     if (!CLIENT_ID && !CLIENT_SECRET && !TWITCH_USERNAME) {
-        ctx.reply('Настройки twitch не заданы. Настройте: /settings -> Twitch');
+        ctx.reply('⚠️Настройки twitch не заданы. ', 
+            {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{text:'Настроить Twitch', callback_data: 'twitch'}]
+                    ]
+                }
+            }
+        );
         return;
     }
     else if (!CLIENT_ID && !CLIENT_SECRET) {
-        ctx.reply('Токены не заданы. Задайте: /settings -> Twitch -> Сменить токены');
+        ctx.reply('⚠️Токены не заданы.', 
+            {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{text: 'Задать токены', callback_data: 'tokens'}]
+                    ]
+                }
+            }
+        );
         return;
     }
     else if (!TWITCH_USERNAME) {
-        ctx.reply('Имя канала не задана. Задайте: /settings -> Twitch -> Сменить канал');
+        ctx.reply('⚠️Имя канала не задана.', 
+            {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{text: 'Задать канал', callback_data: 'channel'}]
+                    ]
+                }
+            }
+        );
         return;
     }
 
@@ -549,13 +601,13 @@ bot.action('threadclips', ctx => {
                 parse_mode: 'HTML',
                 reply_markup: {
                     inline_keyboard: [
-                        [{ text: 'Хочу отключить опубликование клюпов', callback_data: 'offclips' }]
+                        [{ text: 'Хочу отключить опубликование клипов', callback_data: 'offclips' }]
                     ]
                 }
             }
         );
     }
-    else if (TYPE_CHAT === 'channel'){
+    else if (TYPE_CHAT === 'channel') {
         const flag = isNaN(THREAD_CLIPS_ID) ? 'on' : '';
         ctx.reply('Окей, нажми ниже кнопку, чтобы включить/выключить публикование клипов\n' +
             'Для отмены дествия используй /cancel\n\n' +
@@ -574,15 +626,39 @@ bot.action('threadclips', ctx => {
 
 bot.action('threadalerts', ctx => {
     if (!CLIENT_ID && !CLIENT_SECRET && !TWITCH_USERNAME) {
-        ctx.reply('Настройки twitch не заданы. Настройте: /settings -> Twitch');
+        ctx.reply('⚠️Настройки twitch не заданы. ', 
+            {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{text:'Настроить Twitch', callback_data: 'twitch'}]
+                    ]
+                }
+            }
+        );
         return;
     }
     else if (!CLIENT_ID && !CLIENT_SECRET) {
-        ctx.reply('Токены не заданы. Задайте: /settings -> Twitch -> Сменить токены');
+        ctx.reply('⚠️Токены не заданы.', 
+            {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{text: 'Задать токены', callback_data: 'tokens'}]
+                    ]
+                }
+            }
+        );
         return;
     }
     else if (!TWITCH_USERNAME) {
-        ctx.reply('Имя канала не задана. Задайте: /settings -> Twitch -> Сменить канал');
+        ctx.reply('⚠️Имя канала не задана.', 
+            {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{text: 'Задать канал', callback_data: 'channel'}]
+                    ]
+                }
+            }
+        );
         return;
     }
 
@@ -624,7 +700,7 @@ bot.action('threadalertsedit', ctx => {
     updateEnvVariable('THREAD_ALERTS_ID', threadId);
     THREAD_ALERTS_ID = threadId;
     processAlerts ??= setInterval(checkStream, 60 * 1000);
-    ctx.reply('Поток для получения оповещений о стриме изменен\nДля тестирования используй /testalerts');
+    ctx.reply('✅Поток для получения оповещений о стриме изменен\nДля тестирования используй /testalerts');
     log('Поток для отправки оповещений о стриме изменен на', THREAD_ALERTS_ID);
 });
 
@@ -633,7 +709,7 @@ bot.action('threadnewsedit', ctx => {
     updateEnvVariable('THREAD_NEWS_ID', threadId);
     THREAD_NEWS_ID = threadId;
     processNews ??= setInterval(checkNewPost, 60 * 1000);
-    ctx.reply('Поток для пересылки постов изменен. Для тестрования используй /testnews');
+    ctx.reply('✅Поток для пересылки постов изменен. Для тестрования используй /testnews');
     log('Поток для пересылки постов изменен на', THREAD_NEWS_ID);
 });
 
@@ -642,7 +718,7 @@ bot.action('threadclipsedit', ctx => {
     updateEnvVariable('THREAD_CLIPS_ID', threadId);
     THREAD_CLIPS_ID = threadId;
     processNews ??= setInterval(checkNewClip, 2 * 60 * 1000);
-    ctx.reply('Поток для опубликования клипов изменен');
+    ctx.reply('✅Поток для опубликования клипов изменен');
     log('Поток для опубликования клипов изменен на', THREAD_CLIPS_ID);
 });
 
@@ -733,7 +809,7 @@ bot.action('chatedit', ctx => {
     log('Изменён чат/канал с', CHAT_ID, 'на', chatid);
     log('Потоки сброшены на значение undefined');
     CHAT_ID = chatid;
-    ctx.editMessageText('Смена чата прошла успешно');
+    ctx.editMessageText('✅Смена чата прошла успешно');
 });
 
 bot.on('my_chat_member', ctx => {
@@ -743,8 +819,8 @@ bot.on('my_chat_member', ctx => {
         bot.telegram.sendMessage(OWNER_ID, `Чат: ${title}\nID: ${chatid}\nВсё верно?`, {
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: 'Подтверждаю', callback_data: `chatedit` }],
-                    [{ text: 'Нет, это не тот чат', callback_data: 'chat' }]
+                    [{ text: '✅Подтверждаю', callback_data: `chatedit` }],
+                    [{ text: '❌Нет, это не тот чат', callback_data: 'chat' }]
                 ]
             }
         });
@@ -788,12 +864,14 @@ bot.action('alerts', ctx => {
 
 bot.action('channel', ctx => {
     action = 'channeledit';
-    ctx.reply('Окей, напиши имя канала, на который ты хочешь сменить. Используй /cancel для отмены действия');
+    ctx.reply('Окей, напиши имя канала, который ты хочешь добавить/сменить. Используй /cancel для отмены действия');
 });
 
 bot.action('tokens', ctx => {
     action = 'tokensedit';
-    ctx.reply('Окей, сначала напиши мне ID клиента. Его можно получить на странице https://dev.twitch.tv/console/apps');
+    ctx.reply('Окей, сначала напиши мне ID клиента. Его можно получить на странице https://dev.twitch.tv/console/apps\n' + 
+        'Для отмены действия используй /cancel'
+    );
 });
 
 // ==================== Настройки взаимодействия с твичом. Конец =====================
@@ -807,12 +885,12 @@ bot.on('message', async ctx => {
             updateEnvVariable('TWITCH_USERNAME', value);
             TWITCH_USERNAME = value;
             userId = await getUserId(value, CLIENT_ID, accessToken);
-            await ctx.reply('Смена канала прошла успешно.');
+            await ctx.reply('✅Смена канала прошла успешно.');
             break;
 
         case 'tokensedit':
             if (value.length !== 30) {
-                await ctx.reply('Токен имеет нестандартную длину. Введи токен без пробелов, символов ещё раз')
+                await ctx.reply('⚠️Токен имеет нестандартную длину. Введи токен без пробелов, символов ещё раз')
                 return;
             }
             client_id = value;
@@ -822,33 +900,49 @@ bot.on('message', async ctx => {
 
         case 'tokenedit1':
             if (value.length !== 30) {
-                await ctx.reply('Токен имеет нестандартную длину. Введи токен без пробелов, символов ещё раз')
+                await ctx.reply('⚠️Токен имеет нестандартную длину. Введи токен без пробелов, символов ещё раз')
                 return;
             }
             ctx.reply('Подожди немного...');
             if (!(accessToken = await getAccessToken(client_id, value))) {
                 await ctx.reply('Введены неправильные токены. Убедись, что токены получены верные. Введи ID клиента снова');
-                log('Полученные токены неверные. Токен доступа не получен');
+                log('❌Полученные токены неверные. Токен доступа не получен');
                 action = 'tokensedit';
                 return;
             }
+
+            if(!TWITCH_USERNAME) {
+                ctx.reply('⚠️Канал не был задан. Это не повлияет на работу системы, ' + 
+                    'однако рекомендуется добавить канал Twitch для корректного функционирования некоторых компонентов',
+                {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{text: 'Добавить канал', callback_data: 'channel'}]
+                        ]
+                    }
+                });
+            }
+
             userId ??= await getUserId(TWITCH_USERNAME, CLIENT_ID, accessToken);
             updateEnvVariable('CLIENT_ID', client_id);
             updateEnvVariable('CLIENT_SECRET', value);
+
+            CLIENT_ID = client_id;
+            CLIENT_SECRET = value;
 
             if (!isNaN(THREAD_ALERTS_ID))
                 processAlerts ??= setInterval(checkStream, 60 * 1000);
             if (!isNaN(THREAD_CLIPS_ID))
                 processClips ??= setInterval(checkNewClip, 2 * 60 * 1000);
 
-            await ctx.reply('Смена токенов прошла успешно.');
+            await ctx.reply('✅Смена токенов прошла успешно.');
             log('Токены были изменены');
             break;
 
         case 'alertsedit':
             saveLastData(ALERTS_MESSAGE_FILE, value);
             mesAlerts = value;
-            await ctx.reply('Записал новый текст. Для проверки можешь воспользоваться командой /testalerts');
+            await ctx.reply('✅Записал новый текст. Для проверки можешь воспользоваться командой /testalerts');
             log('Текст оповещения о начале стрима изменен');
             break;
 
@@ -866,8 +960,8 @@ bot.on('message', async ctx => {
                         {
                             reply_markup: {
                                 inline_keyboard: [
-                                    [{ text: 'Подтверждаю', callback_data: action }],
-                                    [{ text: 'Нет, это не тот поток', callback_data: action.slice(0, action.length - 4) }]
+                                    [{ text: '✅Подтверждаю', callback_data: action }],
+                                    [{ text: '❌Нет, это не тот поток', callback_data: action.slice(0, action.length - 4) }]
                                 ]
                             }
                         }
@@ -878,27 +972,27 @@ bot.on('message', async ctx => {
 
         case 'telegramchanneledit':
             if (!value.includes('https://t.me/')) {
-                ctx.reply('Это не ссылка на телеграм-канал. Введи верную ссылку ещё раз');
+                ctx.reply('❌Это не ссылка на телеграм-канал. Введи верную ссылку ещё раз');
                 return;
             }
 
             TELEGRAM_CHANNEL = value.split('https://t.me/')[1];
             updateEnvVariable('TELEGRAM_CHANNEL', TELEGRAM_CHANNEL);
-            ctx.reply('Смена канала прошла успешно');
+            ctx.reply('✅Смена канала прошла успешно');
             log('Канал изменен на', TELEGRAM_CHANNEL);
             break;
 
         case 'rssbridgeedit':
             DOMAIN = value;
             updateEnvVariable('DOMAIN', value);
-            ctx.reply('Изменен адрес сервера RSS-bridge');
+            ctx.reply('✅Изменен адрес сервера RSS-bridge');
             log('Адрес сервера RSS-bridge изменен на', value);
             break;
 
         case 'channelsettingsedit':
             const channel = ctx.update.message.forward_origin?.chat;
             if (!channel && channel?.type !== 'channel') {
-                ctx.reply('Это не пост с канала. Перешли любой пост с канала, на который хочешь добавить меня')
+                ctx.reply('❌Это не пост с канала. Перешли любой пост с канала, на который хочешь добавить меня')
                 return;
             }
             chatid = channel.id;
@@ -908,8 +1002,8 @@ bot.on('message', async ctx => {
                 {
                     reply_markup: {
                         inline_keyboard: [
-                            [{ text: 'Подтверждаю', callback_data: action }],
-                            [{ text: 'Нет, это не тот канал', callback_data: action.slice(0, action.length - 4) }]
+                            [{ text: '✅Подтверждаю', callback_data: action }],
+                            [{ text: '❌Нет, это не тот канал', callback_data: action.slice(0, action.length - 4) }]
                         ]
                     }
                 }
@@ -917,7 +1011,7 @@ bot.on('message', async ctx => {
             break;
 
         default:
-            bot.telegram.sendMessage(OWNER_ID, `Неизвестное действие. Вот, что получил: ${action}`);
+            bot.telegram.sendMessage(OWNER_ID, `⚠️Неизвестное действие. Вот, что получил: ${action}`);
             log('Действие', action, 'отсутствует');
             return;
     }
@@ -936,11 +1030,11 @@ if (require.main === module) {
         log('Бот запущен');
 
         if (!CHAT_ID && OWNER_ID)
-            await bot.telegram.sendMessage(OWNER_ID, 'Чат группы не задан. Добавьте чат перед настройкой бота',
+            await bot.telegram.sendMessage(OWNER_ID, '🚨Чат группы/канал не задан. Добавьте чат перед настройкой бота',
                 {
                     reply_markup: {
                         inline_keyboard: [
-                            [{ text: 'Добавить чат', callback_data: 'chat' }]
+                            [{ text: 'Добавить чат/канал', callback_data: 'chatchannel' }]
                         ]
                     }
                 });
@@ -955,9 +1049,30 @@ if (require.main === module) {
         if (CLIENT_ID && CLIENT_SECRET) {
             accessToken = await getAccessToken(CLIENT_ID, CLIENT_SECRET);
             if (!accessToken) {
-                bot.telegram.sendMessage(OWNER_ID, 'Срок действия токенов истёк\n' +
-                    'Поменяйте их в настройках /settings -> Twitch -> Сменить токены');
+                bot.telegram.sendMessage(OWNER_ID, '🚨Срок действия токенов истёк\n' +
+                    'Поменяйте их в настройках',
+                    {
+                        reply_markup: {
+                            inline_keyboard: [
+                                [{ text: 'Сменить токены', callback_data: 'tokens' }]
+                            ]
+                        }
+                    }
+                );
             }
+
+            if(!TWITCH_USERNAME) {
+                bot.telegram.sendMessage(OWNER_ID, '⚠️Не был указан канал Twitch',
+                    {
+                        reply_markup:{
+                            inline_keyboard:[
+                                [{text:'Задать канал', callback_data: 'channel'}]
+                            ]
+                        }
+                    }
+                );
+            }
+
             userId = await getUserId(TWITCH_USERNAME, CLIENT_ID, accessToken);
 
             // Проверка стримов
@@ -974,8 +1089,16 @@ if (require.main === module) {
         }
         else {
             if (OWNER_ID)
-                bot.telegram.sendMessage(OWNER_ID, 'Настройки Twitch не были затронуты. Загляни в /settings -> Twitch');
-            log('Некоторые токены для взаимодействия с твичом отсутствуют. Некоторые функции отключены');
+                bot.telegram.sendMessage(OWNER_ID, '🚨Настройки Twitch не были затронуты.',
+                    {
+                        reply_markup: {
+                            inline_keyboard: [
+                                [{ text: 'Настроить Twitch', callback_data: 'twitch' }]
+                            ]
+                        }
+                    }
+                );
+            log('Некоторые токены для взаимодействия с твичом отсутствуют. Часть функций отключены');
         }
         if (OWNER_ID)
             bot.telegram.sendMessage(OWNER_ID, `Пересылка постов: ${processNews ? '🟢включен' : '🔴отключен'}\n` +
