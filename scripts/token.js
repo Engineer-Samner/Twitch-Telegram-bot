@@ -1,6 +1,8 @@
 const fs = require('fs');
 const { Telegraf } = require('telegraf');
 
+
+// Чекает валидность токена
 function checkToken(BOT_TOKEN) {
     if (!fs.existsSync('./.env')) {
         let env = fs.readFileSync('./.env.example');
