@@ -809,7 +809,7 @@ bot.action(/^chatsettings:(.+)$/gi, ctx => {
             break;
 
         case 'threadalerts':
-            let objAlerts = checkAlerts();
+            let objAlerts = checkTwitch();
             if (!objAlerts.ok) {
                 ctx.reply(objAlerts.reason, {
                     reply_markup: {
@@ -900,7 +900,7 @@ bot.action(/^chatsettings:(.+)$/gi, ctx => {
             break;
 
         case 'threadclips':
-            const obj = checkClips();
+            const obj = checkTwitch();
             if (!obj.ok) {
                 ctx.reply(obj.reason, {
                     reply_markup: {
