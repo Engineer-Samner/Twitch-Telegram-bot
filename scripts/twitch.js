@@ -93,7 +93,7 @@ async function streamStatus(userId, clientId, accessToken) {
  * @param {String} clientId ID клиента
  * @param {String} accessToken токен доступа
  */
-async function getLatestClip(userId, clientId, accessToken) {
+async function getLatestClip(userId, clientId, accessToken, lastDate = (Date.now() - 24 * 60 * 60)) {
     try {
         const response = await axios.get('https://api.twitch.tv/helix/clips', {
             headers: {
@@ -102,8 +102,8 @@ async function getLatestClip(userId, clientId, accessToken) {
             },
             params: {
                 broadcaster_id: userId,
-                first: 1, // Получаем только последний клип
-                started_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() // За последние 24 часа
+                first: 10, // Получаем последние 10 клипов
+                started_at: new Date(lastDate).toISOString(), // Начиная с последнего опубликованного клипа
             }
         });
 
@@ -146,8 +146,12 @@ if (require.main === module) {
                 wasLive = false;
             }
         }, CHECK_INTERVAL);
+        const date = Date.now() - 24 * 60 * 60;
+        console.log(date);
+        console.log(Date.now());
 
-        const object = await getLatestClip(userId, CLIENT_ID, accessToken);
+        const object = await getLatestClip(userId, CLIENT_ID, accessToken, date);
+        console.log(object);
     })();
 }
 
