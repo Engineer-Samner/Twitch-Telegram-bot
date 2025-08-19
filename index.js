@@ -1,11 +1,13 @@
 const { Telegraf } = require('telegraf');
 const fs = require('fs');
+const axios = require('axios');
 
 const { log, getDate, writeToFile } = require('./scripts/log.js');
 const { parseTelegramPost } = require('./scripts/rss.js');
 const { streamStatus, getAccessToken, getUserId, getLatestClip } = require('./scripts/twitch.js');
 const { updateEnvVariable } = require('./scripts/env.js');
 const { checkToken } = require('./scripts/token.js');
+const path = require('path');
 
 require('dotenv').config();
 const {
@@ -92,7 +94,7 @@ async function checkNewPost() {
 
         if (isNaN(numLink) || lastPost >= numLink) return;
 
-        if (!await forwardLastPost(object.text, object.media, object.link)) return;
+        if (!await forwardLastPost(object.text, [], object.link)) return;
         lastPost = numLink;
         saveLastData(LAST_POST_FILE, lastPost);
     }
@@ -171,7 +173,7 @@ async function forwardLastPost(text, urls, link) {
     try {
         if (urls.length > 0) {
             // Создаем captions: текст только для первого элемента
-            const captions = [text, ...Array(urls.length - 1).fill(undefined)];
+            const captions = [text, ...Array(urls.length - 1).fill('')];
 
             await bot.telegram.sendMediaGroup(
                 CHAT_ID,
@@ -204,9 +206,22 @@ async function forwardLastPost(text, urls, link) {
 }
 
 function info() {
-    bot.telegram.sendMessage(OWNER_ID, `Пересылка постов: ${processNews ? '🟢включен' : '🔴отключен'}\n` +
-        `Оповещения о стримах: ${processAlerts ? '🟢включен' : '🔴отключен'}\n` +
-        `Публикация клипов: ${processClips ? '🟢включен' : '🔴отключен'}`
+    const news = checkNews();
+    const twitch = checkTwitch();
+    const keyboard = [
+        !news.ok ? news.button : [],
+        !twitch.ok ? twitch.button : [],
+    ];
+    bot.telegram.sendMessage(OWNER_ID, `Пересылка постов: ${news.ok && processNews ? '🟢включен' : '🔴отключен'}\n` +
+        `${news.ok ? '' : news.reason.concat('\n\n') }`+
+        `Оповещения о стримах: ${twitch.ok && processAlerts ? '🟢включен' : '🔴отключен'}\n` +
+        `Публикация клипов: ${twitch.ok && processClips ? '🟢включен' : '🔴отключен'}\n` +
+        `${twitch.ok ? '' : twitch.reason}`,
+        {
+            reply_markup: {
+                inline_keyboard: keyboard
+            }
+        }
     );
     return;
 }
@@ -413,7 +428,7 @@ bot.action('chatsettings', async ctx => {
     ctx.editMessageText('Текущие настройки чата\n\n' +
         `Чат группы/канал: ${chat?.title ?? 'Не задан или бот не состоит в группе/канале'}\n` +
         `Поток для оповещений о стриме: ${(isNaN(THREAD_ALERTS_ID) ? undefined : THREAD_ALERTS_ID) ?? 'Не задан'}\n` +
-        `Поток для пересылки постов с канала ${TELEGRAM_CHANNEL}: ${(isNaN(THREAD_NEWS_ID) ? undefined : THREAD_NEWS_ID) ?? 'Не задан'}\n` +
+        `Поток для пересылки постов с канала @${TELEGRAM_CHANNEL}: ${(isNaN(THREAD_NEWS_ID) ? undefined : THREAD_NEWS_ID) ?? 'Не задан'}\n` +
         `Поток для опубликования клипов: ${(isNaN(THREAD_CLIPS_ID) ? undefined : THREAD_CLIPS_ID) ?? 'Не задан'}`,
         {
             reply_markup: {
@@ -422,7 +437,8 @@ bot.action('chatsettings', async ctx => {
                     [{ text: 'Сменить поток постов', callback_data: 'chatsettings:threadnews' }, { text: 'Сменить поток клипов', callback_data: 'chatsettings:threadclips' }],
                     [{ text: '◀️Назад', callback_data: 'settings' }]
                 ]
-            }
+            },
+            parse_mode: 'HTML'
         }
     );
 });
@@ -537,7 +553,7 @@ function generatePhrase() {
     return retVal;
 }
 
-function checkAlerts() {
+function checkTwitch() {
     if (!CLIENT_ID && !CLIENT_SECRET && !TWITCH_USERNAME) {
         return {
             ok: false,
@@ -545,18 +561,18 @@ function checkAlerts() {
             button: [{ text: 'Настроить Twitch', callback_data: 'twitch' }]
         }
     }
-    else if (!CLIENT_ID && !CLIENT_SECRET) {
+    else if (!CLIENT_ID && !CLIENT_SECRET && !accessToken) {
         return {
             ok: false,
             reason: '⚠️Токены не заданы или срок их истек.',
-            button: [{ text: 'Задать токены', callback_data: 'tokens' }]
+            button: [{ text: 'Задать токены', callback_data: 'twitch:tokens' }]
         }
     }
     else if (!TWITCH_USERNAME) {
         return {
             ok: false,
             reason: '⚠️Имя канала не задана.',
-            button: [{ text: 'Задать канал', callback_data: 'channel' }]
+            button: [{ text: 'Задать канал', callback_data: 'twitch:channel' }]
         }
     }
     return {
@@ -576,41 +592,14 @@ function checkNews() {
         return {
             ok: false,
             reason: '⚠️Адрес сервера не задан.',
-            button: [{ text: 'Задать адрес сервера', callback_data: 'rssbridge' }]
+            button: [{ text: 'Задать адрес сервера', callback_data: 'forward:rssbridge' }]
         }
     }
     else if (!TELEGRAM_CHANNEL) {
         return {
             ok: false,
             reason: '⚠️Отслеживаемый канал не задан.',
-            button: [{ text: 'Задать канал', callback_data: 'telegramchannel' }]
-        }
-    }
-    return {
-        ok: true
-    }
-}
-
-function checkClips() {
-    if (!CLIENT_ID && !CLIENT_SECRET && !TWITCH_USERNAME) {
-        return {
-            ok: false,
-            reason: '⚠️Настройки twitch не заданы. ',
-            button: [{ text: 'Настроить Twitch', callback_data: 'twitch' }]
-        }
-    }
-    else if (!CLIENT_ID && !CLIENT_SECRET) {
-        return {
-            ok: false,
-            reason: '⚠️Токены не заданы.',
-            button: [{ text: 'Задать токены', callback_data: 'tokens' }]
-        }
-    }
-    else if (!TWITCH_USERNAME) {
-        return {
-            ok: false,
-            reason: '⚠️Имя канала не задана.',
-            button: [{ text: 'Задать канал', callback_data: 'channel' }]
+            button: [{ text: 'Задать канал', callback_data: 'forward:telegramchannel' }]
         }
     }
     return {
@@ -660,7 +649,7 @@ bot.action(/^chatsettings:threadnews:(.+)$/gi, ctx => {
             THREAD_NEWS_ID = undefined;
             clearInterval(processNews);
             processNews = undefined;
-            fs.unlinkSync(`./data/others/${LAST_POST_FILE}`);
+            !fs.existsSync(`./data/others/${LAST_POST_FILE}`) || fs.unlinkSync(`./data/others/${LAST_POST_FILE}`);
             lastPost = '';
             ctx.reply('🔴Отключил пересылку постов',
                 {
@@ -783,7 +772,7 @@ bot.action(/^chatsettings:threadclips:(.+)$/gi, ctx => {
             THREAD_CLIPS_ID = undefined;
             clearInterval(processClips);
             processClips = undefined;
-            fs.unlinkSync(`./data/others/${LAST_CLIP_FILE}`);
+            !fs.existsSync(`./data/others/${LAST_CLIP_FILE}`) || fs.unlinkSync(`./data/others/${LAST_CLIP_FILE}`);
             lastClip = '';
             ctx.reply('🔴Отключил публикование клипов',
                 {
@@ -1232,31 +1221,8 @@ async function main() {
     // Взаимодействие с твичом
     if (CLIENT_ID && CLIENT_SECRET) {
         accessToken = await getAccessToken(CLIENT_ID, CLIENT_SECRET);
-        if (!TWITCH_USERNAME && OWNER_ID) {
-            bot.telegram.sendMessage(OWNER_ID, '⚠️Не был указан канал Twitch',
-                {
-                    reply_markup: {
-                        inline_keyboard: [
-                            [{ text: 'Задать канал', callback_data: 'channel' }]
-                        ]
-                    }
-                }
-            );
-        }
 
-        if (!accessToken && OWNER_ID) {
-            bot.telegram.sendMessage(OWNER_ID, '🚨Срок действия токенов истёк\n' +
-                'Поменяйте их в настройках',
-                {
-                    reply_markup: {
-                        inline_keyboard: [
-                            [{ text: 'Сменить токены', callback_data: 'tokens' }]
-                        ]
-                    }
-                }
-            );
-        }
-        else {
+        if (accessToken && OWNER_ID) {
             userId = await getUserId(TWITCH_USERNAME, CLIENT_ID, accessToken);
 
             // Проверка стримов
@@ -1271,19 +1237,6 @@ async function main() {
                 processClips = await setInterval(checkNewClip, 60 * 1000 * 2);
             }
         }
-    }
-    else {
-        if (OWNER_ID)
-            bot.telegram.sendMessage(OWNER_ID, '🚨Настройки взаимодействия с Twitch не были затронуты.',
-                {
-                    reply_markup: {
-                        inline_keyboard: [
-                            [{ text: 'Настроить Twitch', callback_data: 'twitch' }]
-                        ]
-                    }
-                }
-            );
-        log('Некоторые токены для взаимодействия с Twitch отсутствуют. Часть функций отключено');
     }
     info();
 }
