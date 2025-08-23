@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { Input } = require('telegraf');
 
 const { log } = require('./log.js');
 
@@ -47,12 +48,14 @@ async function parseVideoTelegram(postText) {
         // Ищем видео
         const vidTagRegex = /<video\s+[^>]*src=["']([^"']+)["'][^>]*>/gi;
         while ((match = vidTagRegex.exec(postText)) !== null) {
-            urls.push(['video', match[1]]);
+            const res = await axios.get(match[1], { responseType: "stream" });
+            urls.push(['video', Input.fromReadableStream(res.data)]);
         }
 
         const vidTagSrcRegex = /<source\s+src=["'](.*?)["'] type=["']video\/mp4["']>/gi;
         while ((match = vidTagSrcRegex.exec(postText)) !== null) {
-            urls.push(['video', match[1]]);
+            const res = await axios.get(match[1], { responseType: "stream" });
+            urls.push(['video', Input.fromReadableStream(res.data)]);
         }
 
         return urls;
@@ -75,7 +78,8 @@ async function parseImageTelegram(postText) {
         // Ищем изображения
         const imgTagRegex = /<img\s+[^>]*src=["']([^"']+)["'][^>]*>/gi;
         while ((match = imgTagRegex.exec(postText)) !== null) {
-            urls.push(['photo', match[1]]);
+            const res = await axios.get(match[1], { responseType: "stream" });
+            urls.push(['photo', Input.fromReadableStream(res.data)]);
         }
 
         return urls;
