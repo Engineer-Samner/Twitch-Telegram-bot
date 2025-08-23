@@ -94,7 +94,7 @@ async function checkNewPost() {
 
         if (isNaN(numLink) || lastPost >= numLink) return;
 
-        if (!await forwardLastPost(object.text, [], object.link)) return;
+        if (!await forwardLastPost(object.text, object.media, object.link)) return;
         lastPost = numLink;
         saveLastData(LAST_POST_FILE, lastPost);
     }
@@ -1207,7 +1207,7 @@ async function main() {
             {
                 reply_markup: {
                     inline_keyboard: [
-                        [{ text: 'Добавить чат/канал', callback_data: 'chatchannel' }]
+                        [{ text: 'Добавить чат/канал', callback_data: 'chatsettings:chatchannel' }]
                     ]
                 }
             });
