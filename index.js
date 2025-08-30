@@ -3,7 +3,7 @@ const fs = require('fs');
 const axios = require('axios');
 
 const { log, getDate, writeToFile } = require('./scripts/log.js');
-const { parseTelegramPost } = require('./scripts/rss.js');
+const { parseTelegramPost, getMedia } = require('./scripts/rss.js');
 const { streamStatus, getAccessToken, getUserId, getLatestClip } = require('./scripts/twitch.js');
 const { updateEnvVariable } = require('./scripts/env.js');
 const { checkToken } = require('./scripts/token.js');
@@ -94,7 +94,9 @@ async function checkNewPost() {
 
         if (isNaN(numLink) || lastPost >= numLink) return;
 
-        if (!await forwardLastPost(object.text, object.media, object.link)) return;
+        const media = await getMedia(object.media);
+
+        if (!await forwardLastPost(object.text, media, object.link)) return;
         lastPost = numLink;
         saveLastData(LAST_POST_FILE, lastPost);
     }

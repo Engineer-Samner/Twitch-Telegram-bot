@@ -36,6 +36,24 @@ async function parseTelegramPost(channelname, domain = 'rss-bridge.org/bridge01'
     }
 }
 
+async function getMedia(media) {
+    try {
+        let urls = [];
+        let res;
+
+        for (let mediaUrl of media) {
+            res = await axios.get(mediaUrl[1], { responseType: 'stream' });
+            urls.push([mediaUrl[0], Input.fromReadableStream(res.data)]);
+        }
+
+        return urls;
+    }
+    catch (error) {
+        log('❌Ошибка при получении медиа:', error.message);
+        return undefined;
+    }
+}
+
 /**
  * Извлекает из содержимого поста все видео
  * @param {*} postText содержимое поста из description
@@ -44,24 +62,23 @@ async function parseVideoTelegram(postText) {
     try {
         const urls = [];
         let match;
+        let res;
 
         // Ищем видео
         const vidTagRegex = /<video\s+[^>]*src=["']([^"']+)["'][^>]*>/gi;
         while ((match = vidTagRegex.exec(postText)) !== null) {
-            const res = await axios.get(match[1], { responseType: "stream" });
-            urls.push(['video', Input.fromReadableStream(res.data)]);
+            urls.push(['video', match[1]]);
         }
 
         const vidTagSrcRegex = /<source\s+src=["'](.*?)["'] type=["']video\/mp4["']>/gi;
         while ((match = vidTagSrcRegex.exec(postText)) !== null) {
-            const res = await axios.get(match[1], { responseType: "stream" });
-            urls.push(['video', Input.fromReadableStream(res.data)]);
+            urls.push(['video', match[1]]);
         }
 
         return urls;
     }
     catch (error) {
-        log('❌Ошибка при парсинге видео:', error.message);
+        log('❌Ошибка при парсинге URL-адреса видео:', error.message);
         return undefined;
     }
 }
@@ -85,7 +102,7 @@ async function parseImageTelegram(postText) {
         return urls;
     }
     catch (error) {
-        log('❌Ошибка при парсинге фото:', error.message);
+        log('❌Ошибка при парсинге URL-адреса фото:', error.message);
         return undefined
     }
 }
@@ -125,7 +142,7 @@ async function parseTextTelegram(postText, postLink = '') {
     }
 }
 
-module.exports = { parseTelegramPost };
+module.exports = { parseTelegramPost, getMedia };
 
 if (require.main === module) {
     (async () => {
