@@ -20,7 +20,7 @@ async function parseTelegramPost(channelname, domain = 'rss-bridge.org/bridge01'
 
         const response = await axios.get(url);
         const data = response.data;
-        const post = data.items[0];
+        const post = data.items[1];
         const desc = post.content_html || '';
         const link = post.url || '';
         const urls = [...await parseVideoTelegram(desc), ...await parseImageTelegram(desc)];
@@ -97,8 +97,7 @@ async function parseImageTelegram(postText) {
         // Ищем изображения
         const imgTagRegex = /<img\s+[^>]*src=["']([^"']+)["'][^>]*>/gi;
         while ((match = imgTagRegex.exec(postText)) !== null) {
-            const res = await axios.get(match[1], { responseType: "stream" });
-            urls.push(['photo', Input.fromReadableStream(res.data)]);
+            urls.push(['photo', match[1]]);
         }
 
         return urls;
