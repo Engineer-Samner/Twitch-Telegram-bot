@@ -20,7 +20,7 @@ async function parseTelegramPost(channelname, domain = 'rss-bridge.org/bridge01'
 
         const response = await axios.get(url);
         const data = response.data;
-        const post = data.items[1];
+        const post = data.items[0];
         const desc = post.content_html || '';
         const link = post.url || '';
         const urls = [...await parseVideoTelegram(desc), ...await parseImageTelegram(desc)];
@@ -64,7 +64,6 @@ async function parseVideoTelegram(postText) {
     try {
         const urls = [];
         let match;
-        let res;
 
         // Ищем видео
         const vidTagRegex = /<video\s+[^>]*src=["']([^"']+)["'][^>]*>/gi;
