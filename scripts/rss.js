@@ -41,6 +41,8 @@ async function getMedia(media) {
         let urls = [];
         let res;
 
+        if(media.length === 0) return [];
+
         for (let mediaUrl of media) {
             res = await axios.get(mediaUrl[1], { responseType: 'stream' });
             urls.push([mediaUrl[0], Input.fromReadableStream(res.data)]);
@@ -50,7 +52,7 @@ async function getMedia(media) {
     }
     catch (error) {
         log('❌Ошибка при получении медиа:', error.message);
-        return undefined;
+        return [];
     }
 }
 
