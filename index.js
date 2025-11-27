@@ -48,6 +48,7 @@ let chatid = null;
 let client_id = '';
 let phrase = '';
 let threadId = '';
+let adminlist = [];
 
 if (require.main === module) {
     if(!checkToken(BOT_TOKEN)){
@@ -207,14 +208,14 @@ async function forwardLastPost(text, urls, link) {
     }
 }
 
-function info() {
+function info(ctx) {
     const news = checkNews();
     const twitch = checkTwitch();
     const keyboard = [
         !news.ok ? news.button : [],
         !twitch.ok ? twitch.button : [],
     ];
-    bot.telegram.sendMessage(OWNER_ID, `Пересылка постов: ${news.ok && processNews ? '🟢включен' : '🔴отключен'}\n` +
+    ctx.reply(CHAT_ID, `Пересылка постов: ${news.ok && processNews ? '🟢включен' : '🔴отключен'}\n` +
         `${news.ok ? '' : news.reason.concat('\n\n') }`+
         `Оповещения о стримах: ${twitch.ok && processAlerts ? '🟢включен' : '🔴отключен'}\n` +
         `Публикация клипов: ${twitch.ok && processClips ? '🟢включен' : '🔴отключен'}\n` +
@@ -228,6 +229,15 @@ function info() {
     return;
 }
 
+async function getAdminList() {
+    let list = await bot.telegram.getChatAdministrators(CHAT_ID);
+    let result = [];
+    for(let admin of list){
+        result.push(admin.user.id);
+    }
+    return result;
+}
+
 // ==================== Телеграм бот =====================
 
 bot.catch((err) => {
@@ -235,42 +245,51 @@ bot.catch((err) => {
     bot.telegram.sendMessage(OWNER_ID, `Необработанное исключение бота: ${err.message}`);
 });
 
-bot.start(ctx => {
-
-    if (!OWNER_ID) {
-        updateEnvVariable('OWNER_ID', ctx.chat.id);
-    }
-    else if (OWNER_ID != ctx.chat.id) {
-        ctx.reply('Вы не являетесь владельцем бота. Доступ запрещен');
-        return;
-    }
-    const username = ctx.update.message.from.first_name || 'друг';
-    ctx.reply(`Привет! Рад с тобой познакомится, ${username}!\n` +
-        'Я тебя запомнил и в дальнейшем буду некоторые сообщения отправлять тебе. Теперь расскажу кратко, что я умею\n' +
-        '<i>- Я умею копировать посты с других публичных телеграм каналов и пересылать в чат (даже в определённый поток (тему))</i>\n' +
-        '<i>- отправлять оповещения о начале стрима в чат (также в определённый поток)</i>\n\n' +
-        'Собственно, это всё, что я умею. Теперь пропиши /help, чтобы вывести команды, которые во мне заложены',
-        {
-            parse_mode: 'HTML'
+bot.start(async ctx => {
+    let chatfrom = ctx.chat.id;
+    if (chatfrom < 0) {
+        if (adminlist.includes(ctx.message.from.id)){
+            updateEnvVariable('CHAT_ID', chatfrom);
+            CHAT_ID = chatfrom;
         }
-    );
+        let response = await ctx.reply('Привет! Я бот, который помогает стримерам в их деятельности в пределах Telegram\n' +
+            'Теперь расскажу кратко, что я умею\n' +
+            '<i>- Я умею копировать посты с других публичных телеграм каналов и пересылать в чат (даже в определённый поток (тему))</i>\n' +
+            '<i>- отправлять оповещения о начале стрима в чат (также в определённый поток)</i>\n\n' +
+            'Собственно, это всё, что я умею. Теперь пропиши /help, чтобы вывести команды, которые во мне заложены',
+            {
+                parse_mode: 'HTML'
+            }
+        );
+        setTimeout((() => {
+            bot.telegram.deleteMessage(chatfrom, response.message_id);
+            bot.telegram.deleteMessage(chatfrom, ctx.message.message_id);
+        }), 60000);
+    }
+    else {
+        const username = ctx.update.message.from.first_name || 'друг';
+        ctx.reply(`Привет! Рад с тобой познакомится, ${username}!\n` +
+            'Добавь меня в группу\/телеграм канал и пропиши \/start в нем для дальнейшей настройки\n',
+            {
+                parse_mode: 'HTML'
+            }
+        );
+    }
 });
 
 bot.help(async ctx => {
     await ctx.reply('/info - вывод информации по боту\n' +
         '/log - вывод лога за текущий день (начиная с 00-00)\n' +
-        '/stop - остановка бота. Могут использовать команду администраторы чата\n' +
+        '/stop - остановка работы бота\n' +
         '/testalerts - отправляет тестовое сообщение оповещения в чат\n' +
         '/testnews - отправляет тестовое сообщение поста в чат\n' +
         '/settings - настройки бота\n\n' +
         'Собственно, это всё, что есть из набора. Если есть пожелания или ты обнаружил ошибку, напиши разработчику @enginrr'
     );
-    if (!OWNER_ID)
-        await ctx.reply('На этом всё, теперь необходимо перезагрузить меня для дальшнейшей настройки');
 });
 
-bot.command('info', () => {
-    info();
+bot.command('info', (ctx) => {
+    info(ctx);
 });
 
 bot.command('testalerts', async (ctx) => {
@@ -1240,10 +1259,10 @@ async function main() {
             }
         }
     }
-    info();
 }
 
 // Если модуль - main
 if (require.main === module) {
     main();
+    getAdminList();
 }
