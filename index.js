@@ -51,7 +51,7 @@ let threadId = '';
 let adminlist = [];
 
 if (require.main === module) {
-    if(!checkToken(BOT_TOKEN)){
+    if (!checkToken(BOT_TOKEN)) {
         setTimeout(() => { }, 10000);
         return;
     }
@@ -216,7 +216,7 @@ function info(ctx) {
         !twitch.ok ? twitch.button : [],
     ];
     ctx.reply(CHAT_ID, `Пересылка постов: ${news.ok && processNews ? '🟢включен' : '🔴отключен'}\n` +
-        `${news.ok ? '' : news.reason.concat('\n\n') }`+
+        `${news.ok ? '' : news.reason.concat('\n\n')}` +
         `Оповещения о стримах: ${twitch.ok && processAlerts ? '🟢включен' : '🔴отключен'}\n` +
         `Публикация клипов: ${twitch.ok && processClips ? '🟢включен' : '🔴отключен'}\n` +
         `${twitch.ok ? '' : twitch.reason}`,
@@ -229,13 +229,40 @@ function info(ctx) {
     return;
 }
 
-async function getAdminList() {
-    let list = await bot.telegram.getChatAdministrators(CHAT_ID);
-    let result = [];
-    for(let admin of list){
-        result.push(admin.user.id);
+async function getAdminList(chat = CHAT_ID) {
+    try {
+        let list = await bot.telegram.getChatAdministrators(chat);
+        let result = [];
+        for (let admin of list) {
+            result.push(admin.user.id);
+        }
+        return result;
     }
-    return result;
+    catch (err) {
+        log('Ошибка при сборе информации об администраторах:', err.message);
+        return [];
+    }
+}
+
+async function getBotPermissions(chat = CHAT_ID) {
+    try {
+        let list = await bot.telegram.getChatAdministrators(chat);
+        let botInfo = await bot.telegram.getMe();
+        for (let admin of list) {
+            if (admin.user.id === botInfo.id) {
+                return admin;
+            }
+        }
+        return undefined;
+    }
+    catch (err) {
+        log('Ошибка при получении прав бота:', err.message);
+        return undefined;
+    }
+}
+
+function isAdmin(ctx) {
+    return adminlist.includes(ctx.update.message?.from.id || ctx.update.callback_query?.from.id);
 }
 
 // ==================== Телеграм бот =====================
@@ -248,29 +275,47 @@ bot.catch((err) => {
 bot.start(async ctx => {
     let chatfrom = ctx.chat.id;
     if (chatfrom < 0) {
-        if (adminlist.includes(ctx.message.from.id)){
+        adminlist = await getAdminList(chatfrom);
+        if (adminlist.includes(ctx.message.from.id)) {
             updateEnvVariable('CHAT_ID', chatfrom);
             CHAT_ID = chatfrom;
         }
         let response = await ctx.reply('Привет! Я бот, который помогает стримерам в их деятельности в пределах Telegram\n' +
             'Теперь расскажу кратко, что я умею\n' +
-            '<i>- Я умею копировать посты с других публичных телеграм каналов и пересылать в чат (даже в определённый поток (тему))</i>\n' +
+            '<i>- копировать посты с других публичных телеграм каналов и пересылать в чат (даже в определённый поток (тему))</i>\n' +
             '<i>- отправлять оповещения о начале стрима в чат (также в определённый поток)</i>\n\n' +
             'Собственно, это всё, что я умею. Теперь пропиши /help, чтобы вывести команды, которые во мне заложены',
             {
                 parse_mode: 'HTML'
             }
         );
-        setTimeout((() => {
-            bot.telegram.deleteMessage(chatfrom, response.message_id);
-            bot.telegram.deleteMessage(chatfrom, ctx.message.message_id);
-        }), 60000);
+        let perm = await getBotPermissions(chatfrom);
+        if (perm?.can_delete_messages && perm?.can_manage_topics) {
+            setTimeout((() => {
+                bot.telegram.deleteMessage(chatfrom, response.message_id).catch(() => { });
+                bot.telegram.deleteMessage(chatfrom, ctx.message.message_id).catch(() => { });
+            }), 60000);
+        }
+        else {
+            ctx.reply('Необходимы права администратора с этими правами\n' +
+                '<i>- Удаление сообщений</i>\n' +
+                '<i>- Управление темами</i>',
+                {
+                    parse_mode: 'HTML'
+                }
+            )
+        }
     }
     else {
         const username = ctx.update.message.from.first_name || 'друг';
         ctx.reply(`Привет! Рад с тобой познакомится, ${username}!\n` +
-            'Добавь меня в группу\/телеграм канал и пропиши \/start в нем для дальнейшей настройки\n',
+            'Если хочешь добавить меня в телеграм канал, нажми на кнопку ниже, иначе добавь в группу и пропиши \/start в нем для дальнейшей настройки\n',
             {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{text: 'Добавить бота в телеграм канал', callback_data: 'chatsettings:chatchannel:channel'}]
+                    ]
+                },
                 parse_mode: 'HTML'
             }
         );
@@ -344,10 +389,7 @@ bot.command('stop', async ctx => {
 
 
 bot.command('settings', ctx => {
-    if (ctx.chat.id != OWNER_ID) {
-        ctx.reply('❌Вы не являетесь владельцем бота. Доступ запрещен');
-        return;
-    }
+    if (!isAdmin(ctx)) return;
     ctx.reply('Настройки бота',
         {
             reply_markup: {
@@ -371,6 +413,7 @@ bot.command('cancel', ctx => {
 });
 
 bot.action('settings', ctx => {
+    if (!isAdmin(ctx)) return;
     ctx.editMessageText('Настройки бота',
         {
             reply_markup: {
@@ -1219,19 +1262,6 @@ async function main() {
     lastClip = loadLastData(LAST_CLIP_FILE);
     mesAlerts = loadLastData(ALERTS_MESSAGE_FILE);
     bot.launch();
-    if (OWNER_ID)
-        await bot.telegram.sendMessage(OWNER_ID, 'Бот запущен');
-    log('Бот запущен');
-
-    if (!CHAT_ID && OWNER_ID)
-        await bot.telegram.sendMessage(OWNER_ID, '🚨Чат группы/канал не задан. Добавьте бота в чат/канал перед его настройкой',
-            {
-                reply_markup: {
-                    inline_keyboard: [
-                        [{ text: 'Добавить чат/канал', callback_data: 'chatsettings:chatchannel' }]
-                    ]
-                }
-            });
 
     // Пересылка постов
     if (!isNaN(THREAD_NEWS_ID) && THREAD_NEWS_ID) {
@@ -1243,7 +1273,7 @@ async function main() {
     if (CLIENT_ID && CLIENT_SECRET) {
         accessToken = await getAccessToken(CLIENT_ID, CLIENT_SECRET);
 
-        if (accessToken && OWNER_ID) {
+        if (accessToken) {
             userId = await getUserId(TWITCH_USERNAME, CLIENT_ID, accessToken);
 
             // Проверка стримов
@@ -1263,6 +1293,8 @@ async function main() {
 
 // Если модуль - main
 if (require.main === module) {
-    main();
-    getAdminList();
+    (async () => {
+        main();
+        adminlist = await getAdminList();
+    })();
 }
