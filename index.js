@@ -208,14 +208,14 @@ async function forwardLastPost(text, urls, link) {
     }
 }
 
-function info(ctx) {
+async function info(ctx) {
     const news = checkNews();
     const twitch = checkTwitch();
     const keyboard = [
         !news.ok ? news.button : [],
         !twitch.ok ? twitch.button : [],
     ];
-    ctx.reply(CHAT_ID, `Пересылка постов: ${news.ok && processNews ? '🟢включен' : '🔴отключен'}\n` +
+    return await ctx.reply(CHAT_ID, `Пересылка постов: ${news.ok && processNews ? '🟢включен' : '🔴отключен'}\n` +
         `${news.ok ? '' : news.reason.concat('\n\n')}` +
         `Оповещения о стримах: ${twitch.ok && processAlerts ? '🟢включен' : '🔴отключен'}\n` +
         `Публикация клипов: ${twitch.ok && processClips ? '🟢включен' : '🔴отключен'}\n` +
@@ -226,7 +226,6 @@ function info(ctx) {
             }
         }
     );
-    return;
 }
 
 async function getAdminList(chat = CHAT_ID) {
@@ -263,6 +262,64 @@ async function getBotPermissions(chat = CHAT_ID) {
 
 function isAdmin(ctx) {
     return adminlist.includes(ctx.update.message?.from.id || ctx.update.callback_query?.from.id);
+}
+
+async function testalerts(ctx) {
+    await sendAlertsMessage(mesAlerts ?? 'Прилетело оповещение сюда');
+    log('Тестовое оповещение было отправлено в чат', CHAT_ID, 'поток', THREAD_ALERTS_ID);
+    return await ctx.reply('Тестовое оповещение отправлено');
+}
+
+async function testnews(ctx) {
+    await forwardLastPost('Тестовый пост прилетел сюда', [], 'https://testpost');
+    log('Тестовый пост отправлен в чат', CHAT_ID, 'поток', THREAD_NEWS_ID);
+    return await ctx.reply('Тестовый пост отправлен');
+}
+
+async function getLog(ctx) {
+    const date = getDate();
+    const fileLog = `log-${date.year}-${date.month}-${date.day}.txt`;
+    try {
+        if (!fs.existsSync(`./logs/${fileLog}`)) {
+            throw Error('файл не найден');
+        }
+        log('Выгружен файл', fileLog);
+        return await ctx.replyWithDocument({ source: `logs/${fileLog}` });
+    }
+    catch (error) {
+        log(`❌Ошибка отправки файла ${fileLog}: ${error}`);
+        return await ctx.reply(OWNER_ID, `Ошибка отправки файла ${fileLog}: ${error}`);
+    }
+}
+
+async function settings(ctx) {
+    return await ctx.reply('Настройки бота',
+        {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: 'Чат', callback_data: 'chatsettings' }],
+                    [{ text: 'Пересылка постов', callback_data: 'forward' }, { text: 'Twitch', callback_data: 'twitch' }],
+                    // [{ text: 'Обновить бота', callback_data: 'botupdate' }]
+                ]
+            }
+        }
+    );
+}
+
+async function stop(ctx) {
+    const username = ctx.update.message.from.first_name;
+    ctx.reply('Бот остановил работу');
+    log('Бот остановлен администратором', username);
+    bot.stop('Бот остановлен администратором');
+}
+
+async function cancel(ctx) {
+    action = 'cancel';
+    threadId = undefined;
+    phrase = '';
+    client_id = '';
+    chatid = '';
+    return await ctx.reply('Действие отменено');
 }
 
 // ==================== Телеграм бот =====================
@@ -313,7 +370,7 @@ bot.start(async ctx => {
             {
                 reply_markup: {
                     inline_keyboard: [
-                        [{text: 'Добавить бота в телеграм канал', callback_data: 'chatsettings:chatchannel:channel'}]
+                        [{ text: 'Добавить бота в телеграм канал', callback_data: 'chatsettings:chatchannel:channel' }]
                     ]
                 },
                 parse_mode: 'HTML'
@@ -333,83 +390,61 @@ bot.help(async ctx => {
     );
 });
 
-bot.command('info', (ctx) => {
-    info(ctx);
-});
+bot.command(/(.+)/, async ctx => {
+    if (!(isAdmin(ctx) || OWNER_ID)) return;
+    const command = ctx.match[1];
+    const chatfrom = ctx.chat.id;
+    let response = undefined;
+    switch (command) {
+        case 'info':
+            response = await info(ctx);
+            break;
 
-bot.command('testalerts', async (ctx) => {
-    await sendAlertsMessage(mesAlerts ?? 'Прилетело оповещение сюда');
-    ctx.reply('Тестовое оповещение отправлено');
-    log('Тестовое оповещение было отправлено в чат', CHAT_ID, 'поток', THREAD_ALERTS_ID);
-});
+        case 'testalerts':
+            response = await testalerts(ctx);
+            break;
 
-bot.command('testnews', async (ctx) => {
-    await forwardLastPost('Тестовый пост прилетел сюда', [], 'https://testpost');
-    ctx.reply('Тестовый пост отправлен');
-    log('Тестовый пост отправлен в чат', CHAT_ID, 'поток', THREAD_NEWS_ID);
-});
+        case 'testnews':
+            response = await testnews(ctx);
+            break;
 
-bot.command('log', async () => {
-    const date = getDate();
-    const fileLog = `log-${date.year}-${date.month}-${date.day}.txt`;
-    try {
-        if (!fs.existsSync(`./logs/${fileLog}`)) {
-            throw Error('файл не найден');
-        }
-        await bot.telegram.sendDocument(OWNER_ID, { source: `logs/${fileLog}` });
-        log('Выгружен файл', fileLog);
+        case 'log':
+            response = await getLog(ctx);
+            break;
+
+        case 'stop':
+            stop(ctx);
+            break;
+
+        case 'settings':
+            response = await settings(ctx);
+            break;
+
+        case 'cancel':
+            response = await cancel(ctx);
+            break;
+
+        default:
+            break;
     }
-    catch (error) {
-        bot.telegram.sendMessage(OWNER_ID, `Ошибка отправки файла ${fileLog}: ${error}`);
-        log(`❌Ошибка отправки файла ${fileLog}: ${error}`);
-    }
-});
-
-bot.command('stop', async ctx => {
-    const user_id = ctx.update.message.from.id;
-    const username = ctx.update.message.from.first_name;
-    let flag = true;
-    await bot.telegram.getChatAdministrators(CHAT_ID).then(admins => {
-        for (let admin of admins) {
-            if (admin.user.id == user_id) {
-                ctx.reply('Бот остановил работу');
-                bot.telegram.sendMessage(OWNER_ID, `Бот остановлен администратором ${admin.user.first_name}`);
-                log('Бот остановлен администратором', admin.user.first_name);
-                bot.stop('Бот остановлен администратором');
-                flag = false;
-                return;
-            }
+    if (chatfrom < 0) {
+        let perm = await getBotPermissions(chatfrom);
+        if (perm?.can_delete_messages && perm?.can_manage_topics) {
+            setTimeout((() => {
+                bot.telegram.deleteMessage(chatfrom, response.message_id).catch(() => { });
+                bot.telegram.deleteMessage(chatfrom, ctx.message.message_id).catch(() => { });
+            }), 60000);
         }
-    })
-    if (flag) {
-        ctx.reply('❌Для выполнения команды необходимы права администратора чата');
-        log(username, 'использует команду /stop: необходимы права администратора');
-    }
-});
-
-
-bot.command('settings', ctx => {
-    if (!isAdmin(ctx)) return;
-    ctx.reply('Настройки бота',
-        {
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: 'Чат', callback_data: 'chatsettings' }],
-                    [{ text: 'Пересылка постов', callback_data: 'forward' }, { text: 'Twitch', callback_data: 'twitch' }],
-                    // [{ text: 'Обновить бота', callback_data: 'botupdate' }]
-                ]
-            }
+        else {
+            await ctx.reply('Необходимы права администратора с этими правами\n' +
+                '<i>- Удаление сообщений</i>\n' +
+                '<i>- Управление темами</i>',
+                {
+                    parse_mode: 'HTML'
+                }
+            )
         }
-    );
-});
-
-bot.command('cancel', ctx => {
-    action = 'cancel';
-    threadId = undefined;
-    phrase = '';
-    client_id = '';
-    chatid = '';
-    ctx.reply('Действие отменено');
+    }
 });
 
 bot.action('settings', ctx => {
