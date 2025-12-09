@@ -1,6 +1,6 @@
 const fs = require('fs');
 const { Telegraf } = require('telegraf');
-
+const { updateEnvVariable } = require('./env.js');
 
 // Чекает валидность токена
 function checkToken(BOT_TOKEN) {
@@ -20,7 +20,7 @@ function checkToken(BOT_TOKEN) {
             fs.unlinkSync('./token.txt');
             console.log('Нашел файл с токеном бота. Перезапусти скрипт и запусти бота в телеграмме');
 
-        }).catch(error => {
+        }).catch(() => {
             console.log('Неверный токен. Запиши верный API-токен в \"token.txt\" и снова запусти этот скрипт');
         }); // Проверяем, отвечает ли API
         return false;
@@ -28,4 +28,4 @@ function checkToken(BOT_TOKEN) {
     return true;
 }
 
-module.exports = {checkToken};
+module.exports = { checkToken };
