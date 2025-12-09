@@ -330,11 +330,13 @@ bot.catch((err) => {
 });
 
 bot.start(async ctx => {
-    let chatfrom = ctx.chat.id;
+    const chatfrom = ctx.chat.id;
     if (chatfrom < 0) {
         adminlist = await getAdminList(chatfrom);
-        if (adminlist.includes(ctx.message.from.id)) {
+        if (isAdmin(ctx.message.from.id)) {
             updateEnvVariable('CHAT_ID', chatfrom);
+            updateEnvVariable('TYPE_CHAT', 'group');
+            TYPE_CHAT = 'group';
             CHAT_ID = chatfrom;
         }
         let response = await ctx.reply('Привет! Я бот, который помогает стримерам в их деятельности в пределах Telegram\n' +
@@ -1143,7 +1145,7 @@ bot.action(/twitch:(.+)/gi, async ctx => {
         case 'tokens':
             if (chatfrom < 0) {
                 let perm = await getBotPermissions(CHAT_ID);
-                if (!perm.can_delete_messages) {
+                if (!perm?.can_delete_messages) {
                     response = ctx.reply('Необходимы права администратора с этими правами\n' +
                         '<i>- Удаление сообщений</i>',
                         {
@@ -1213,8 +1215,9 @@ bot.on('message', async ctx => {
                 response = await ctx.reply('⚠️Токен имеет нестандартную длину. Введи токен без пробелов, символов ещё раз')
                 break;
             }
-            ctx.reply('Подожди немного...');
+            response = await ctx.reply('Подожди немного...');
             if (!(accessToken = await getAccessToken(client_id, value))) {
+                ctx.deleteMessage(response.message_id);
                 response = await ctx.reply('Введены неправильные токены. Убедись, что токены получены верные. Введи ID клиента снова');
                 log('❌Полученные токены неверные. Токен доступа не получен');
                 action = 'tokensedit';
@@ -1228,7 +1231,8 @@ bot.on('message', async ctx => {
             }
 
             action = 'cancel';
-            userId ??= await getUserId(TWITCH_USERNAME, CLIENT_ID, accessToken);
+            ctx.deleteMessage(response.message_id);
+            userId ??= await getUserId(TWITCH_USERNAME, client_id, accessToken);
             updateEnvVariable('CLIENT_ID', client_id);
             updateEnvVariable('CLIENT_SECRET', value);
 
@@ -1402,6 +1406,6 @@ async function main() {
 if (require.main === module) {
     (async () => {
         main();
-        adminlist = await getAdminList();
+        adminlist = await getAdminList(CHAT_ID);
     })();
 }
