@@ -11,11 +11,11 @@ const path = require('path');
 
 require('dotenv').config();
 const {
-    BOT_TOKEN,                      // Токен телеграм бота
-    OWNER_ID                        // ID владельца бота
+    BOT_TOKEN                       // Токен телеграм бота
 } = process.env;
 
 let {
+    OWNER_ID,                       // ID владельца бота
     CHAT_ID,                        // ID чата
     TYPE_CHAT,                      // Тип чата
     TOPIC_ALERTS_ID,               // ID потока чата-оповещения (опционально)
@@ -356,7 +356,7 @@ bot.start(async ctx => {
             }), 60000);
         }
         else {
-            ctx.reply('Необходимы права администратора с этими правами\n' +
+            await ctx.reply('Для дальнейшей настройки необходимы следующие права администратора боту:\n' +
                 '<i>- Удаление сообщений</i>\n' +
                 '<i>- Управление темами</i>',
                 {
@@ -366,6 +366,7 @@ bot.start(async ctx => {
         }
     }
     else {
+        OWNER_ID = chatfrom;
         const username = ctx.update.message.from.first_name || 'друг';
         ctx.reply(`Привет! Рад с тобой познакомится, ${username}!\n` +
             'Если хочешь добавить меня в телеграм канал, нажми на кнопку ниже, иначе добавь в группу и пропиши \/start в нем для дальнейшей настройки\n',
@@ -382,14 +383,15 @@ bot.start(async ctx => {
 });
 
 bot.help(async ctx => {
-    await ctx.reply('/info - вывод информации по боту\n' +
-        '/log - вывод лога за текущий день (начиная с 00-00)\n' +
-        '/stop - остановка работы бота\n' +
-        '/testalerts - отправляет тестовое сообщение оповещения в чат\n' +
-        '/testnews - отправляет тестовое сообщение поста в чат\n' +
-        '/settings - настройки бота\n\n' +
-        'Собственно, это всё, что есть из набора. Если есть пожелания или ты обнаружил ошибку, напиши разработчику @enginrr'
-    );
+    if (!(isAdmin(ctx) || OWNER_ID)) return;
+        await ctx.reply('/info - вывод информации по боту\n' +
+            '/log - вывод лога за текущий день (начиная с 00-00)\n' +
+            '/stop - остановка работы бота\n' +
+            '/testalerts - отправляет тестовое сообщение оповещения в чат\n' +
+            '/testnews - отправляет тестовое сообщение поста в чат\n' +
+            '/settings - настройки бота\n\n' +
+            'Собственно, это всё, что есть из набора. Если есть пожелания или ты обнаружил ошибку, напиши разработчику @enginrr'
+        );
 });
 
 bot.command(/(.+)/, async ctx => {
@@ -419,6 +421,19 @@ bot.command(/(.+)/, async ctx => {
             break;
 
         case 'settings':
+            if (chatfrom < 0) {
+                let perm = await getBotPermissions(chatfrom);
+                if (!(perm?.can_delete_messages && perm?.can_manage_topics)) {
+                    await ctx.reply('Для дальнейшей настройки необходимо выдать следующие права администратора боту:\n' +
+                        '<i>- Удаление сообщений</i>\n' +
+                        '<i>- Управление темами</i>',
+                        {
+                            parse_mode: 'HTML'
+                        }
+                    );
+                    break;
+                }
+            }
             response = await settings(ctx);
             break;
 
@@ -436,15 +451,6 @@ bot.command(/(.+)/, async ctx => {
             setTimeout((() => {
                 bot.telegram.deleteMessage(chatfrom, response.message_id).catch(() => { });
             }), 60000);
-        }
-        else {
-            await ctx.reply('Необходимы права администратора с этими правами\n' +
-                '<i>- Удаление сообщений</i>\n' +
-                '<i>- Управление темами</i>',
-                {
-                    parse_mode: 'HTML'
-                }
-            )
         }
     }
 });
@@ -519,7 +525,8 @@ bot.action(/^forward:(.+)/gi, async ctx => {
     }
     if (chatfrom < 0) {
         setTimeout(() => {
-            ctx.deleteMessage(response.message_id).catch();
+            if (action !== 'cancel') { cancel(ctx); }
+            bot.telegram.deleteMessage(CHAT_ID, response.message_id).catch();
         }, 60000);
     }
 });
@@ -608,6 +615,7 @@ bot.action(/^chatsettings:chatchannel:(.+)/gi, async ctx => {
 
         case 'channeledit':
             action = 'cancel';
+            updateEnvVariable('OWNER_ID', ctx.chat.id);
             updateEnvVariable('TYPE_CHAT', 'channel');
             updateEnvVariable('CHAT_ID', chatid);
 
@@ -623,7 +631,7 @@ bot.action(/^chatsettings:chatchannel:(.+)/gi, async ctx => {
             clearInterval(processClips);
             clearInterval(processNews);
 
-            response = await ctx.reply('✅Смена канала/чата прошла успешно',
+            response = await ctx.reply('✅Смена канала прошла успешно',
                 {
                     reply_markup: {
                         inline_keyboard: [
@@ -648,7 +656,8 @@ bot.action(/^chatsettings:chatchannel:(.+)/gi, async ctx => {
     }
     if (chatfrom < 0) {
         setTimeout(() => {
-            ctx.deleteMessage(response.message_id).catch();
+            if (action !== 'cancel') { cancel(ctx); }
+            bot.telegram.deleteMessage(CHAT_ID, response.message_id).catch();
         }, 60000);
     }
 });
@@ -782,7 +791,8 @@ bot.action(/^chatsettings:threadnews:(.+)$/gi, async ctx => {
     }
     if (chatfrom < 0) {
         setTimeout(() => {
-            ctx.deleteMessage(response.message_id).catch();
+            if (action !== 'cancel') { cancel(ctx); }
+            bot.telegram.deleteMessage(CHAT_ID, response.message_id).catch();
         }, 60000);
     }
 });
@@ -851,7 +861,8 @@ bot.action(/^chatsettings:threadalerts:(.+)$/gi, async ctx => {
     }
     if (chatfrom < 0) {
         setTimeout(() => {
-            ctx.deleteMessage(response.message_id).catch();
+            if (action !== 'cancel') { cancel(ctx); }
+            bot.telegram.deleteMessage(CHAT_ID, response.message_id).catch();
         }, 60000);
     }
 });
@@ -921,7 +932,8 @@ bot.action(/^chatsettings:threadclips:(.+)$/gi, async ctx => {
     }
     if (chatfrom < 0) {
         setTimeout(() => {
-            ctx.deleteMessage(response.message_id).catch();
+            if (action !== 'cancel') { cancel(ctx); }
+            bot.telegram.deleteMessage(CHAT_ID, response.message_id).catch();
         }, 60000);
     }
 });
@@ -1089,7 +1101,7 @@ bot.action(/^chatsettings:(.+)$/gi, async ctx => {
 
     if (chatfrom < 0) {
         setTimeout(() => {
-            cancel(ctx);
+            if (action !== 'cancel') { cancel(ctx); }
             ctx.deleteMessage(response.message_id).catch();
         }, 60000);
     }
@@ -1143,18 +1155,6 @@ bot.action(/twitch:(.+)/gi, async ctx => {
             break;
 
         case 'tokens':
-            if (chatfrom < 0) {
-                let perm = await getBotPermissions(CHAT_ID);
-                if (!perm?.can_delete_messages) {
-                    response = ctx.reply('Необходимы права администратора с этими правами\n' +
-                        '<i>- Удаление сообщений</i>',
-                        {
-                            parse_mode: 'HTML'
-                        }
-                    );
-                    break;
-                }
-            }
             action = 'tokensedit';
             response = await ctx.reply('Окей, сначала напиши мне ID клиента. Его можно получить на странице https://dev.twitch.tv/console/apps\n' +
                 'Для отмены действия используй /cancel'
@@ -1167,7 +1167,8 @@ bot.action(/twitch:(.+)/gi, async ctx => {
     }
     if (chatfrom < 0) {
         setTimeout(() => {
-            ctx.deleteMessage(response.message_id).catch();
+            if (action !== 'cancel') { cancel(ctx); }
+            bot.telegram.deleteMessage(CHAT_ID, response.message_id).catch();
         }, 60000);
     }
 });
@@ -1355,10 +1356,7 @@ bot.on('message', async ctx => {
     }
     if (chatfrom < 0) {
         setTimeout(() => {
-            if (action !== 'cancel') {
-                ctx.reply('Действие отменено');
-            }
-            action = 'cancel';
+            if (action !== 'cancel') { cancel(ctx); }
             bot.telegram.deleteMessage(CHAT_ID, response.message_id).catch();
         }, 60000);
     }
@@ -1406,6 +1404,8 @@ async function main() {
 if (require.main === module) {
     (async () => {
         main();
-        adminlist = await getAdminList(CHAT_ID);
+        if (!OWNER_ID) {
+            adminlist = await getAdminList(CHAT_ID);
+        }
     })();
 }
