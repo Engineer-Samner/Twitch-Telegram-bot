@@ -322,6 +322,30 @@ async function cancel(ctx) {
     return await ctx.reply('Действие отменено');
 }
 
+async function connect(ctx){
+    if(TYPE_CHAT === 'channel') {
+        ctx.reply('Данная команда предназначена для ботов, состоящих в чат группах');
+        return false;
+    }
+    updateEnvVariable('OWNER_ID', ctx.chat.id);
+    OWNER_ID = ctx.chat.id;
+    adminlist = [];
+    ctx.reply('Теперь настройки бота можете менять только вы');
+    return true;
+}
+
+async function disconnect(ctx) {
+    if(TYPE_CHAT === 'channel'){
+        ctx.reply('Данная команда предназначена для ботов, состоящих в чат группах');
+        return false;
+    }
+    updateEnvVariable('OWNER_ID', '');
+    OWNER_ID = undefined;
+    adminlist = await getAdminList(CHAT_ID);
+    ctx.reply('Настройка бота доступна всем админам чат группы');
+    return true;
+}
+
 // ==================== Телеграм бот =====================
 
 bot.catch((err) => {
@@ -420,6 +444,22 @@ bot.command(/(.+)/, async ctx => {
             stop(ctx);
             break;
 
+        case 'connect':
+            if (chatfrom < 0) {
+                response = await ctx.reply('Данную команду необходимо прописать в личных сообщениях с ботом');
+                break;
+            }
+            connect(ctx);
+            break;
+        
+        case 'disconnect':
+            if (chatfrom < 0) {
+                response = await ctx.reply('Эту команду можно использовать только в личных сообщениях бота');
+                break;
+            }
+            disconnect(ctx);
+            break;
+
         case 'settings':
             if (chatfrom < 0) {
                 let perm = await getBotPermissions(chatfrom);
@@ -441,8 +481,6 @@ bot.command(/(.+)/, async ctx => {
             response = await cancel(ctx);
             break;
 
-        default:
-            break;
     }
     if (chatfrom < 0) {
         let perm = await getBotPermissions(chatfrom);
